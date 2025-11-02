@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+.conda/
+.mamba/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+dist/
+build/
+*.egg-info/
+
+# Project data (generated/big)
+datasets/
+!datasets/.gitkeep
+
+*.log
+.env

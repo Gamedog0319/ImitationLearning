@@ -1,0 +1,2 @@
+add keyboard to record look events
+modify actions to store as : {turn left,turn right,go around , idle, goal reached}
