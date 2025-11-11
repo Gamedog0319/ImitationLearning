@@ -19,7 +19,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 
-DATA_ROOT   = "dataset_malmo"                          # dataset folder
+DATA_ROOT   = "../BC_demo/dataset_malmo"                          # dataset folder
 FRAMES_DIR  = os.path.join(DATA_ROOT, "frames")        # images stores here
 CSV_PATH    = os.path.join(DATA_ROOT, "actions.csv")   # mapping image with action
 IMG_SIZE    = 84                                       # resize images to 84x84
@@ -33,50 +33,9 @@ SEED        = 42
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 
 # Action label mapping
-ACTION2ID = {"LEFT":0, "RIGHT":1, "GO":2, "BACK":3}
+ACTION2ID = {"LEFT":0, "RIGHT":1, "GO":2}
 ID2ACTION = {v:k for k,v in ACTION2ID.items()}
-NUM_ACTIONS = 4
-
-# Draws a simple arrow image pointing in a given direction
-def draw_arrow(direction: int, size: int = IMG_SIZE) -> Image.Image:
-    img = Image.new("L", (size, size), color=0)
-    d = ImageDraw.Draw(img)
-    cx, cy = size // 2, size // 2
-    length = int(size * 0.45)
-    width  = int(size * 0.10)
-    head   = int(size * 0.14)
-    body = [(cx - length//2, cy - width//2), (cx + length//2, cy + width//2)]
-    head_pts = [(cx + length//2, cy),
-                (cx + length//2 - head, cy - head),
-                (cx + length//2 - head, cy + head)]
-    d.rectangle(body, fill=255)
-    d.polygon(head_pts, fill=255)
-    angle_map = {0:180, 1:0, 2:90, 3:270}  # LEFT, RIGHT, GO, BACK
-    angle = angle_map[direction] + random.uniform(-8, 8)
-    img = img.rotate(angle, resample=Image.BILINEAR, expand=False)
-    return img.convert("RGB")
-
-# Generates a quick fake dataset so we can train without real Malmo data
-# # Each image gets an arrow + label (LEFT, RIGHT, GO, BACK)
-# Everything gets saved into dataset_malmo/frames/ and actions.csv
-def make_fake_dataset(n_samples:int=3000):
-    os.makedirs(FRAMES_DIR, exist_ok=True)
-    rows: List[List[str]] = []
-    per_class = max(1, n_samples // NUM_ACTIONS)
-    labels = [a for a in range(NUM_ACTIONS) for _ in range(per_class)]
-    while len(labels) < n_samples:
-        labels.append(random.randint(0, NUM_ACTIONS-1))
-    random.shuffle(labels)
-    for i, a in enumerate(labels, start=1):
-        img = draw_arrow(a, IMG_SIZE)
-        fname = f"{i:06d}.png"
-        img.save(os.path.join(FRAMES_DIR, fname))
-        rows.append([fname, ["LEFT","RIGHT","GO","BACK"][a]])
-    with open(CSV_PATH, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["filename","action"])
-        w.writerows(rows)
-    print(f"[OK] Wrote fake dataset: {len(rows)} samples at {DATA_ROOT}")
+NUM_ACTIONS = len(ACTION2ID)
 
 # Simple dataset wrapper that loads images + action labels
 class MalmoImageDataset(Dataset):
@@ -233,23 +192,21 @@ def load_policy_and_predict(frame_rgb_numpy: np.ndarray) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Behavior Cloning Demo", allow_abbrev=False)
-    parser.add_argument("--make-fake", type=int, default=0, help="Generate N synthetic samples into dataset_malmo/")
     parser.add_argument("--train", action="store_true", help="Train CNN on dataset_malmo/")
     parser.add_argument("--predict", action="store_true", help="Run model inference on a sample frame")
 
     args = parser.parse_args()
-    if args.make_fake > 0:
-        make_fake_dataset(args.make_fake)
+
     if args.train:
         train()
     if args.predict:
         # Load any test image from the dataset for prediction.
         # You can change the file path below to test a different frame.
-        img = Image.open("dataset_malmo/frames/000123.png").convert("RGB")
+        img = Image.open("dataset_malmo/frames/000001.png").convert("RGB")
         frame = np.array(img)
         print(load_policy_and_predict(frame))
 
-    if not args.make_fake and not args.train and not args.predict:
+    if not args.train and not args.predict:
         print("Nothing to do. Try:  python bc.py --make-fake 3000   and/or   python bc.py --train")
 
 if __name__ == "__main__":
