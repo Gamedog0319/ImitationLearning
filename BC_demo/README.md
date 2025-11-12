@@ -13,9 +13,9 @@ You only need **Python 3.9+** and **PyTorch**.
 
 If you use **Conda**, setup is simple:
 
-conda create -n bc python=3.10
-conda activate bc
-pip install torch torchvision pillow numpy
+conda create -n bc python=3.10  
+conda activate bc  
+pip install torch torchvision pillow numpy  
 
 ## How to run
 **1. Generate a fake dataset (3000 samples)**

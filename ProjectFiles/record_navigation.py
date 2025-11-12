@@ -66,6 +66,9 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
     <AgentHandlers>
       <ObservationFromFullStats/>
       <ContinuousMovementCommands turnSpeedDegs="180"/>
+      <AgentQuitFromReachingPosition>
+        <Marker x="50" y="2" z="5" tolerance="1.0" description="goal"/>
+      </AgentQuitFromReachingPosition>
     </AgentHandlers>
   </AgentSection>
 </Mission>'''
