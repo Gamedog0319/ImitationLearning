@@ -28,9 +28,7 @@ EPOCHS      = 10
 LR          = 3e-4
 WEIGHT_DECAY= 1e-5
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
-# SAVE_PATH   = "malmo_bc_cnn.pth"
-THIS_DIR = os.path.dirname(__file__)
-SAVE_PATH = os.path.join(THIS_DIR, "malmo_bc_cnn.pth")
+SAVE_PATH   = "malmo_bc_cnn.pth"
 SEED        = 42
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 
