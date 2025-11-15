@@ -1,4 +1,7 @@
-import pickle, cv2, numpy as np, math
+import pickle
+import cv2
+import numpy as np
+import math
 
 # === Load dataset ===
 data_path = "datasets/navigation_dataset_hybrid.pkl"
@@ -8,14 +11,14 @@ with open(data_path, "rb") as f:
 print(f"✅ Loaded {len(data)} frames from {data_path}")
 
 # === Settings ===
-delay = 70
-scale_factor = 1.0  # adjust <1.0 to shrink window if too big
+delay = 70            # ms between frames (lower = faster playback)
+scale_factor = 1.0    # < 1.0 to shrink window if it's too big
 
 # === Goal (diamond tower column at x=50,z=5) ===
 GOAL_X, GOAL_Z = 50.0, 5.0
-GOAL_RADIUS = 5.0  # <= 5 blocks horizontally counts as 'goal_reached'
+GOAL_RADIUS = 5.0     # <= 5 blocks horizontally counts as 'goal_reached'
 
-KEYS = ["w","a","s","d","space","j","k","n","m"]
+KEYS = ["w", "a", "s", "d", "space", "j", "k", "n", "m"]
 
 def horiz_goal_reached(entry):
     """Goal if horizontal (XZ) distance to (50,5) <= 5 blocks."""
@@ -35,6 +38,7 @@ def any_input(entry):
     if keys:
         if any(keys.get(k, 0) for k in KEYS):
             return True
+
     act = entry.get("action") or {}
     # treat any nonzero control as an input/motion
     if act:
@@ -47,23 +51,28 @@ def any_input(entry):
             act.get("look_up", 0) == 1 or
             act.get("look_down", 0) == 1):
             return True
+
     return False
 
 def is_idle(entry):
     """Idle = no movement and no button press."""
     keys = entry.get("keys") or {}
     any_key = any(keys.get(k, 0) for k in KEYS) if keys else False
+
     act = entry.get("action") or {}
     moving = False
     if act:
-        moving = (act.get("move", 0) != 0 or
-                  abs(act.get("turn", 0.0)) > 1e-3 or
-                  act.get("jump", 0) == 1 or
-                  abs(act.get("look_updown", 0.0)) > 1e-3 or
-                  act.get("look_left", 0) == 1 or
-                  act.get("look_right", 0) == 1 or
-                  act.get("look_up", 0) == 1 or
-                  act.get("look_down", 0) == 1)
+        moving = (
+            act.get("move", 0) != 0 or
+            abs(act.get("turn", 0.0)) > 1e-3 or
+            act.get("jump", 0) == 1 or
+            abs(act.get("look_updown", 0.0)) > 1e-3 or
+            act.get("look_left", 0) == 1 or
+            act.get("look_right", 0) == 1 or
+            act.get("look_up", 0) == 1 or
+            act.get("look_down", 0) == 1
+        )
+
     return (not any_key) and (not moving)
 
 def compute_state(entry):
@@ -80,15 +89,21 @@ for i, entry in enumerate(data):
     if frame is None:
         frame = entry.get("frame_small")
 
+    if frame is None:
+        continue  # skip if somehow no frame
+
     # Compute state per frame
     state = compute_state(entry)
 
-    # Convert for display
+    # Convert for display (stored as RGB, OpenCV expects BGR)
     frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
+    # Optional downscale for viewing
     if scale_factor != 1.0:
-        w, h = int(frame_bgr.shape[1] * scale_factor), int(frame_bgr.shape[0] * scale_factor)
-        frame_bgr = cv2.resize(frame_bgr, (w, h))
+        height, width = frame_bgr.shape[:2]
+        new_w = int(width * scale_factor)
+        new_h = int(height * scale_factor)
+        frame_bgr = cv2.resize(frame_bgr, (new_w, new_h))
 
     # Overlay state (and basic HUD)
     hud_lines = [
@@ -101,7 +116,16 @@ for i, entry in enumerate(data):
 
     y = 24
     for line in hud_lines:
-        cv2.putText(frame_bgr, str(line), (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
+        cv2.putText(
+            frame_bgr,
+            str(line),
+            (10, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
         y += 26
 
     cv2.imshow("Recorded Gameplay (Hybrid)", frame_bgr)
