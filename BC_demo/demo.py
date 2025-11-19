@@ -11,7 +11,7 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <Mission xmlns="http://ProjectMalmo.microsoft.com"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <About>
-    <Summary>ACtivley Sampling BC Policy</Summary>
+    <Summary>Activley Sampling BC Policy</Summary>
   </About>
   <ServerSection>
     <ServerInitialConditions>
@@ -21,9 +21,9 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
         <Weather>clear</Weather>
     </ServerInitialConditions>
     <ServerHandlers>
-      <FlatWorldGenerator generatorString="3;7,2;1;"/>
+      <FlatWorldGenerator generatorString="3;7,2;1;" forceReset="true"/>
       <DrawingDecorator>
-        <DrawCuboid x1="50" y1="2" z1="5" x2="50" y2="102" z2="5" type="diamond_block"/>
+        <DrawCuboid x1="50" y1="2" z1="0" x2="50" y2="102" z2="10" type="gold_block"/>
       </DrawingDecorator>
       <ServerQuitFromTimeUp timeLimitMs="60000"/>
       <ServerQuitWhenAnyAgentFinishes/>
@@ -35,14 +35,14 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
   <AgentSection mode="Survival">
     <Name>Navigator</Name>
     <AgentStart>
-      <Placement x="0" y="2" z="5" yaw="90"/>
+      <Placement x="30" y="2" z="5" yaw="90"/>
     </AgentStart>
     <AgentHandlers>
       <ObservationFromFullStats/>
       <ContinuousMovementCommands turnSpeedDegs="180"/>
-      <AgentQuitFromReachingPosition>
-        <Marker x="50" y="2" z="5" tolerance="1.0" description="goal"/>
-      </AgentQuitFromReachingPosition>
+      <AgentQuitFromTouchingBlockType>
+        <Block type="gold_block"/>
+      </AgentQuitFromTouchingBlockType>
     </AgentHandlers>
   </AgentSection>
 </Mission>'''
