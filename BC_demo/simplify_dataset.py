@@ -24,6 +24,35 @@ def decide_label(action):
         return "GO"
     return None
 
+# Look at existing CSV (if any) and return the next filename index. 
+# If no CSV, return 1.
+def get_start_counter(csv_path):
+    if not os.path.exists(csv_path):
+        return 1
+
+    max_id = 0
+    with open(csv_path, "r") as f:
+        # skip header
+        header = next(f, None)
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            # filename,action
+            parts = line.split(",")
+            if not parts:
+                continue
+            fname = parts[0]
+            base, _ = os.path.splitext(fname)
+            try:
+                num = int(base)
+                if num > max_id:
+                    max_id = num
+            except ValueError:
+                continue
+
+    return max_id + 1 if max_id > 0 else 1
+
 def main():
     # Load
     with open(PKL_PATH, "rb") as f:
@@ -35,8 +64,17 @@ def main():
     os.makedirs(frames_dir, exist_ok=True)
     csv_path = os.path.join(OUT_DIR, "actions.csv")
 
-    rows = [("filename", "action")]
-    fname_counter = 1
+    # Decide starting counter and CSV mode
+    fname_counter = get_start_counter(csv_path)
+    csv_exists = os.path.exists(csv_path)
+    mode = "a" if csv_exists else "w"
+
+    if csv_exists:
+        print(f"[INFO] Found existing CSV. Continuing filenames from {fname_counter:06d}")
+    else:
+        print(f"[INFO] No existing CSV. Starting fresh at 000001.png")
+
+    rows = []  # only new rows this run
     go_run = 0
     seen_goal = False
 
@@ -65,7 +103,7 @@ def main():
         if lab is None:
             continue
 
-        # downsample long GO runs, 
+        # downsample long GO runs
         if lab == "GO":
             go_run += 1
             if GO_STRIDE > 1 and (go_run % GO_STRIDE) != 1:
@@ -80,13 +118,15 @@ def main():
         rows.append((fname, lab))
         fname_counter += 1
 
-    # write CSV
-    with open(csv_path, "w", newline="") as f:
-        f.write("filename,action\n")
-        for fn, lab in rows[1:]:
+    # write/append CSV
+    with open(csv_path, mode, newline="") as f:
+        # write header only if new file
+        if not csv_exists:
+            f.write("filename,action\n")
+        for fn, lab in rows:
             f.write(f"{fn},{lab}\n")
 
-    print(f"[DONE] Kept {len(rows)-1} frames → {csv_path}")
+    print(f"[DONE] Added {len(rows)} frames → {csv_path}")
     print(f"       Images in {frames_dir}")
 
 if __name__ == "__main__":
