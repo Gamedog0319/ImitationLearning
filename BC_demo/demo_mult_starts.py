@@ -2,50 +2,17 @@ import os
 os.environ["MALMO_MINECRAFT_RESOLUTION"] = "1280x720"
 
 import malmo.MalmoPython as MalmoPython
-import time, numpy as np
+import time, numpy as np, random
 from mss import mss
 from bc import load_policy_and_predict
 
-# === Mission XML ===
-mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
-<Mission xmlns="http://ProjectMalmo.microsoft.com"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <About>
-    <Summary>Activley Sampling BC Policy</Summary>
-  </About>
-  <ServerSection>
-    <ServerInitialConditions>
-        <Time>
-            <StartTime>10000</StartTime>
-        </Time>
-        <Weather>clear</Weather>
-    </ServerInitialConditions>
-    <ServerHandlers>
-      <FlatWorldGenerator generatorString="3;7,2;1;" forceReset="true"/>
-      <DrawingDecorator>
-        <DrawCuboid x1="50" y1="2" z1="0" x2="50" y2="102" z2="10" type="gold_block"/>
-      </DrawingDecorator>
-      <ServerQuitFromTimeUp timeLimitMs="60000"/>
-      <ServerQuitWhenAnyAgentFinishes/>
-    </ServerHandlers>
-  </ServerSection>
-  
-  
-
-  <AgentSection mode="Survival">
-    <Name>Navigator</Name>
-    <AgentStart>
-      <Placement x="30" y="2" z="5" yaw="90"/>
-    </AgentStart>
-    <AgentHandlers>
-      <ObservationFromFullStats/>
-      <ContinuousMovementCommands turnSpeedDegs="180"/>
-      <AgentQuitFromTouchingBlockType>
-        <Block type="gold_block"/>
-      </AgentQuitFromTouchingBlockType>
-    </AgentHandlers>
-  </AgentSection>
-</Mission>'''
+# === Set-up Mission ===
+possible_starts = ['./start1.xml', './start2.xml']
+mission_file = random.choice(possible_starts)
+with open(mission_file, 'r') as f:
+    print("Loading mission from %s" % mission_file)
+    mission_xml = f.read()
+    mission = MalmoPython.MissionSpec(mission_xml, True)
 
 # === Setup Agent ===
 agent_host = MalmoPython.AgentHost()
@@ -55,7 +22,7 @@ except RuntimeError as e:
     print("Error:", e)
     raise SystemExit(1)
 
-mission = MalmoPython.MissionSpec(mission_xml, True)
+# mission = MalmoPython.MissionSpec(mission_xml, True)
 record_spec = MalmoPython.MissionRecordSpec()
 
 client_pool = MalmoPython.ClientPool()
