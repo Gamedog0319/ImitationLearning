@@ -1,4 +1,5 @@
 import os
+import cv2
 os.environ["MALMO_MINECRAFT_RESOLUTION"] = "1280x720"
 
 import malmo.MalmoPython as MalmoPython
@@ -40,6 +41,13 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
     <AgentHandlers>
       <ObservationFromFullStats/>
       <ContinuousMovementCommands turnSpeedDegs="180"/>
+
+      <!-- IMPORTANT: This is the player (agent) camera feed -->
+      <VideoProducer want_depth="false">
+        <Width>1280</Width>
+        <Height>720</Height>
+      </VideoProducer>
+
       <AgentQuitFromTouchingBlockType>
         <Block type="gold_block"/>
       </AgentQuitFromTouchingBlockType>
@@ -65,11 +73,26 @@ client_pool.add(MalmoPython.ClientInfo("127.0.0.1", 10001))
 sct = mss()
 monitor = {"top": 100, "left": 100, "width": 1280, "height": 720}
 
-def grab_rgb(monitor):
-    with mss() as sct:
-        frame = np.array(sct.grab(monitor))       # BGRA
-        rgb = frame[:, :, :3][:, :, ::-1].copy()  # convert BGRA → RGB
-    return rgb
+# def grab_rgb(monitor):
+#     with mss() as sct:
+#         frame = np.array(sct.grab(monitor))       # BGRA
+#         rgb = frame[:, :, :3][:, :, ::-1].copy()  # convert BGRA → RGB
+#     return rgb
+def grab_rgb():
+    # if len(world_state.video_frames == 0):
+    #     # No frame this tick, skip logging this iteration
+    #         # (you can also choose to reuse the previous frame)
+    #     time.sleep(0.01)
+    #     continue
+    vf = world_state.video_frames[-1]  # latest frame
+    img = np.frombuffer(vf.pixels, dtype=np.uint8)
+    img = img.reshape((vf.height, vf.width, 3))   # (H, W, 3), RGB
+
+    frame_rgb = img
+    # Still resize to 84x84 in case you change VideoProducer size later
+    small_frame = cv2.resize(frame_rgb, (1280, 720), interpolation=cv2.INTER_AREA)
+    
+    return small_frame
 
 def move_agent(agent_host, move_type, amount=0.0, duration=1.0):
     """
@@ -106,11 +129,12 @@ print("\n✅ Mission started!")
 while world_state.is_mission_running:
     time.sleep(0.5)
     world_state = agent_host.getWorldState()
-    frame_rgb = grab_rgb(monitor)
+    frame_rgb = grab_rgb()
     actions = {
         'LEFT': -0.2,
         'RIGHT': 0.2,
-        'GO': 1.0}
+        'GO': 1.0
+        }
     next_action = load_policy_and_predict(frame_rgb)
     move_agent(agent_host, next_action, actions[next_action])
 

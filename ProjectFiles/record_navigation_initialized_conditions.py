@@ -4,7 +4,6 @@ os.environ["MALMO_MINECRAFT_RESOLUTION"] = "1280x720"
 import malmo.MalmoPython as MalmoPython
 import time, pickle, numpy as np, cv2, keyboard, json, math
 from threading import Lock, Thread
-from mss import mss
 
 # === Optional OS-level mouse control for human mode ===
 try:
@@ -27,10 +26,10 @@ PITCH_RATE_DN = -1.0    # m
 TURN_MAX, PITCH_MAX = 1.0, 1.0
 
 # --- Smoothing & control pacing (SMOOTHER CAMERA) ---
-SMOOTH_TC = 0.20          # ↑ more smoothing than before (0.12 → 0.20)
-CONTROL_SUBSTEPS = 5       # do 5 micro-updates per tick for buttery motion
-SLEW_YAW_PER_S   = 4.0     # max change in yaw rate units/sec
-SLEW_PITCH_PER_S = 4.0     # max change in pitch rate units/sec
+SMOOTH_TC = 0.20          # smoothing time constant
+CONTROL_SUBSTEPS = 5      # micro-updates per tick for smooth motion
+SLEW_YAW_PER_S   = 4.0    # max change in yaw rate units/sec
+SLEW_PITCH_PER_S = 4.0    # max change in pitch rate units/sec
 
 # Human-mode mouse emulation scaling (pixels/sec at full rate=1.0)
 MOUSE_YAW_PPS   = 900.0
@@ -40,12 +39,14 @@ MOUSE_PITCH_PPS = 700.0
 TICK_SEC_TARGET = 0.10
 
 # === Mission XML ===
+# NOTE: VideoProducer here gives you the AGENT CAMERA frames at 84x84.
 mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <Mission xmlns="http://ProjectMalmo.microsoft.com"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <About>
-    <Summary>Recording</Summary>
+    <Summary>Hybrid Recording (Agent Camera Only)</Summary>
   </About>
+
   <ServerSection>
     <ServerInitialConditions>
         <Time>
@@ -62,8 +63,6 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
       <ServerQuitWhenAnyAgentFinishes/>
     </ServerHandlers>
   </ServerSection>
-  
-  
 
   <AgentSection mode="Survival">
     <Name>Navigator</Name>
@@ -73,6 +72,13 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
     <AgentHandlers>
       <ObservationFromFullStats/>
       <ContinuousMovementCommands turnSpeedDegs="180"/>
+
+      <!-- IMPORTANT: This is the player (agent) camera feed -->
+      <VideoProducer want_depth="false">
+        <Width>1280</Width>
+        <Height>720</Height>
+      </VideoProducer>
+
       <AgentQuitFromTouchingBlockType>
         <Block type="gold_block"/>
       </AgentQuitFromTouchingBlockType>
@@ -107,10 +113,6 @@ current_action = {
 }
 KEYS = ["w","a","s","d","space","j","k","n","m"]
 
-# === Screen capture ===
-sct = mss()
-monitor = {"top": 100, "left": 100, "width": 1280, "height": 720}
-
 # === Goal geometry (for labels) ===
 GOAL_X, GOAL_Y, GOAL_Z = 50.0, 2.0, 5.0
 GOAL_RADIUS = 1.0
@@ -125,30 +127,41 @@ def get_latest_position(world_state):
     except Exception:
         return None, None, None, None, None
 
-def is_on_ground(y): return (y is not None) and (abs(y - GOAL_Y) <= GROUND_TOL)
+def is_on_ground(y):
+    return (y is not None) and (abs(y - GOAL_Y) <= GROUND_TOL)
 
 def goal_reached(x, y, z):
-    if x is None or y is None or z is None: return False
-    if not is_on_ground(y): return False
+    if x is None or y is None or z is None:
+        return False
+    if not is_on_ground(y):
+        return False
     return math.hypot(x - GOAL_X, z - GOAL_Z) <= GOAL_RADIUS
 
 def is_idle(act, keys_pressed):
-    if any(keys_pressed[k] for k in KEYS): return False
+    if any(keys_pressed[k] for k in KEYS):
+        return False
     return (act["move"]==0 and act["turn"]==0.0 and act["jump"]==0 and
             act["look_updown"]==0.0 and act["look_left"]==0 and act["look_right"]==0 and
             act["look_up"]==0 and act["look_down"]==0)
 
 def get_high_level_label(act, reached, keys_pressed):
-    if reached: return "goal_reached"
-    if is_idle(act, keys_pressed): return "idle"
-    if act["turn"] < 0 or act["look_left"]==1 or keys_pressed["j"]: return "turn_left"
-    if act["turn"] > 0 or act["look_right"]==1 or keys_pressed["k"]: return "turn_right"
-    if act["move"] != 0 or keys_pressed["w"] or keys_pressed["s"]: return "go_around"
+    if reached:
+        return "goal_reached"
+    if is_idle(act, keys_pressed):
+        return "idle"
+    if act["turn"] < 0 or act["look_left"]==1 or keys_pressed["j"]:
+        return "turn_left"
+    if act["turn"] > 0 or act["look_right"]==1 or keys_pressed["k"]:
+        return "turn_right"
+    if act["move"] != 0 or keys_pressed["w"] or keys_pressed["s"]:
+        return "go_around"
     return "go_around"
 
 def get_mode_state(reached: bool, idle_flag: bool) -> str:
-    if reached: return "goal_reached"
-    if idle_flag: return "idle"
+    if reached:
+        return "goal_reached"
+    if idle_flag:
+        return "idle"
     return "searching"
 
 # --- Smoothing state ---
@@ -159,7 +172,7 @@ mouse_frac_y  = 0.0  # fractional pixel carryover (y)
 
 def _apply_smoothing_and_slew(rate, target, sub_dt, slew_per_s):
     """EMA toward target, then clamp the per-step change to a slew limit."""
-    alpha = sub_dt / (SMOOTH_TC + sub_dt)           # low-pass
+    alpha = sub_dt / (SMOOTH_TC + sub_dt)  # low-pass
     candidate = (1.0 - alpha) * rate + alpha * target
     delta = candidate - rate
     max_step = slew_per_s * sub_dt
@@ -169,24 +182,37 @@ def _apply_smoothing_and_slew(rate, target, sub_dt, slew_per_s):
 
 def record_loop():
     global dataset, turn_rate_s, pitch_rate_s, mouse_frac_x, mouse_frac_y
-    world_state = agent_host.getWorldState()
+
     last_t = time.perf_counter()
 
-    while world_state.is_mission_running:
+    while True:
         now = time.perf_counter()
-        dt_total = max(1e-3, now - last_t)  # clamp dt to avoid spikes
+        dt_total = max(1e-3, now - last_t)
         last_t = now
 
+        # Get latest world state at the start of the loop
+        world_state = agent_host.getWorldState()
+        if not world_state.is_mission_running:
+            break
+
         # ---- Raw keys ----
-        keys_pressed = {k: int(keyboard.is_pressed(k if k != "space" else "space")) for k in KEYS}
+        keys_pressed = {
+            k: int(keyboard.is_pressed(k if k != "space" else "space"))
+            for k in KEYS
+        }
 
         # ---- Targets from keys (unsmoothed) ----
         move_val = keys_pressed["w"] - keys_pressed["s"]
         turn_target = (
-            (-TURN_RATE_A_D if keys_pressed["a"] else 0.0) + (TURN_RATE_A_D if keys_pressed["d"] else 0.0) +
-            (-TURN_RATE_JK  if keys_pressed["j"] else 0.0) + (TURN_RATE_JK  if keys_pressed["k"] else 0.0)
+            (-TURN_RATE_A_D if keys_pressed["a"] else 0.0) +
+            ( TURN_RATE_A_D if keys_pressed["d"] else 0.0) +
+            (-TURN_RATE_JK  if keys_pressed["j"] else 0.0) +
+            ( TURN_RATE_JK  if keys_pressed["k"] else 0.0)
         )
-        pitch_target = (PITCH_RATE_UP if keys_pressed["n"] else 0.0) + (PITCH_RATE_DN if keys_pressed["m"] else 0.0)
+        pitch_target = (
+            (PITCH_RATE_UP if keys_pressed["n"] else 0.0) +
+            (PITCH_RATE_DN if keys_pressed["m"] else 0.0)
+        )
         turn_target  = max(-TURN_MAX,  min(TURN_MAX,  turn_target))
         pitch_target = max(-PITCH_MAX, min(PITCH_MAX, pitch_target))
         jump_val = keys_pressed["space"]
@@ -200,7 +226,7 @@ def record_loop():
             turn_rate_s  = _apply_smoothing_and_slew(turn_rate_s,  turn_target,  sub_dt, SLEW_YAW_PER_S)
             pitch_rate_s = _apply_smoothing_and_slew(pitch_rate_s, pitch_target, sub_dt, SLEW_PITCH_PER_S)
 
-            # send agent commands each substep for finer motion
+            # send agent commands each substep
             if USE_MALMO_COMMANDS:
                 try:
                     agent_host.sendCommand(f"move {int(move_val)}")
@@ -210,7 +236,7 @@ def record_loop():
                 except RuntimeError:
                     pass
 
-            # OS mouse emulation per substep
+            # OS mouse emulation per substep (optional)
             if USE_OS_MOUSE_EMULATION:
                 dx = turn_rate_s   * MOUSE_YAW_PPS   * sub_dt
                 dy = -pitch_rate_s * MOUSE_PITCH_PPS * sub_dt  # negative: typical game pitch
@@ -243,10 +269,20 @@ def record_loop():
         x, y, z, yaw_obs, pitch_obs = get_latest_position(world_state)
         reached = goal_reached(x, y, z)
 
-        # ---- Screen grab ----
-        img = np.array(sct.grab(monitor))[:, :, :3]
-        frame_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        small_frame = cv2.resize(frame_rgb, (84, 84), interpolation=cv2.INTER_AREA)
+        # ---- Malmo camera frame (agent POV) ----
+        if len(world_state.video_frames) == 0:
+            # No frame this tick, skip logging this iteration
+            # (you can also choose to reuse the previous frame)
+            time.sleep(0.01)
+            continue
+
+        vf = world_state.video_frames[-1]  # latest frame
+        img = np.frombuffer(vf.pixels, dtype=np.uint8)
+        img = img.reshape((vf.height, vf.width, 3))   # (H, W, 3), RGB
+
+        frame_rgb = img
+        # Still resize to 84x84 in case you change VideoProducer size later
+        small_frame = cv2.resize(frame_rgb, (1280, 720), interpolation=cv2.INTER_AREA)
 
         # ---- Labels / modes ----
         idle_flag = is_idle(current_action, keys_pressed)
@@ -255,10 +291,10 @@ def record_loop():
 
         # ---- Log one frame ----
         dataset.append({
-            "frame_full": frame_rgb,
-            "frame_small": small_frame,
-            "action": current_action.copy(),        # smoothed actions
-            "keys": keys_pressed.copy(),            # raw key presses
+            "frame_full": frame_rgb,           # agent camera
+            "frame_small": small_frame,        # 84x84
+            "action": current_action.copy(),   # smoothed actions
+            "keys": keys_pressed.copy(),       # raw key presses
             "camera": {
                 "turn_rate_target": turn_target,
                 "pitch_rate_target": pitch_target,
@@ -279,7 +315,6 @@ def record_loop():
         to_sleep = max(0.0, TICK_SEC_TARGET - (time.perf_counter() - now))
         if to_sleep > 0:
             time.sleep(to_sleep)
-        world_state = agent_host.getWorldState()
 
     print("🟢 Recording thread finished.")
 
@@ -304,7 +339,7 @@ while world_state.is_mission_running:
 
 recorder.join()
 
-# === Save (same path/style) ===
+# === Save dataset ===
 os.makedirs("datasets", exist_ok=True)
 save_path = "datasets/navigation_dataset_hybrid.pkl"
 with open(save_path, "wb") as f:
