@@ -1,8 +1,8 @@
-import os
+import os, sys
 os.environ["MALMO_MINECRAFT_RESOLUTION"] = "1280x720"
 
 import malmo.MalmoPython as MalmoPython
-import time, pickle, numpy as np, cv2, keyboard, json, math
+import time, pickle, numpy as np, cv2, keyboard, json, math, random
 from threading import Lock, Thread
 
 # === Optional OS-level mouse control for human mode ===
@@ -57,7 +57,7 @@ mission_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
     <ServerHandlers>
       <FlatWorldGenerator generatorString="3;7,2;1;" forceReset="true"/>
       <DrawingDecorator>
-        <DrawCuboid x1="50" y1="2" z1="0" x2="50" y2="102" z2="10" type="gold_block"/>
+        <DrawSphere x="0" y="2" z="0" radius="10" type="gold_block"/>
       </DrawingDecorator>
       <ServerQuitFromTimeUp timeLimitMs="60000"/>
       <ServerQuitWhenAnyAgentFinishes/>
@@ -320,6 +320,28 @@ def record_loop():
 
 # ==== Mission run ====
 print("Starting mission...")
+YPOS = 2
+PITCH = 0
+if len(sys.argv) > 1:
+  print("xpos:")
+  xpos = int(input())
+  print("zpos")
+  zpos = int(input())
+  print("yaw:")
+  yaw = int(input())
+else:
+  rng = random.Random()
+  xpos = rng.randint(6, 50)
+  zpos = rng.randint(6, 50)
+  yaw = rng.randint(0, 359)
+print(f"starting at x, y, z: {xpos, YPOS, zpos} in direction {yaw} degrees")
+mission.startAtWithPitchAndYaw(
+    xpos,
+    YPOS,
+    zpos,
+    PITCH,
+    yaw
+)
 agent_host.startMission(mission, client_pool, record_spec, 0, "Navigation")
 
 print("Waiting for mission to start", end="")
