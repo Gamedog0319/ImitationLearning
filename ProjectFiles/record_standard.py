@@ -331,8 +331,8 @@ if len(sys.argv) > 1:
   yaw = int(input())
 else:
   rng = random.Random()
-  xpos = rng.randint(6, 50)
-  zpos = rng.randint(6, 50)
+  xpos = rng.randint(15, 50)
+  zpos = rng.randint(15, 50)
   yaw = rng.randint(0, 359)
 print(f"starting at x, y, z: {xpos, YPOS, zpos} in direction {yaw} degrees")
 mission.startAtWithPitchAndYaw(

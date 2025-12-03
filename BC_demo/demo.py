@@ -180,6 +180,9 @@ def _apply_smoothing_and_slew(rate, target, sub_dt, slew_per_s):
     return rate + delta
 
 def setup_record_thread():
+    """
+    Creates thread for recording and calls the record_loop() method.
+    """
     global recorder, recording_mode
     print("🔴 Switching to human recording mode")
     recording_mode = True
@@ -187,7 +190,10 @@ def setup_record_thread():
     recorder.start()
 
 def record_loop():
-
+    """
+    Loop that starts when human observer takes control. Records screen and action
+    data that will be appended to the training dataset.
+    """
     global dataset, turn_rate_s, pitch_rate_s, mouse_frac_x, mouse_frac_y
 
     print("🟢 Recording loop started.")
@@ -329,6 +335,9 @@ def record_loop():
 
 # === Screen capture ===
 def grab_rgb():
+    """
+    Gets the RGB array representing the game screen pixel values
+    """
     vf = world_state.video_frames[-1]  # latest frame
     img = np.frombuffer(vf.pixels, dtype=np.uint8)
     img = img.reshape((vf.height, vf.width, 3))   # (H, W, 3), RGB
@@ -342,7 +351,6 @@ def grab_rgb():
 def move_agent(agent_host, move_type, amount=0.0, duration=1.0):
     """
     Sends continuous movement commands to a Malmo agent for a given duration.
-
     """
     # Apply movement
     if move_type == 'GO':
@@ -360,13 +368,16 @@ def move_agent(agent_host, move_type, amount=0.0, duration=1.0):
         agent_host.sendCommand("turn 0.0")
 
 def quit_mission():
+    """
+    Hotkey 'p' will call this function which terminates the mission early.
+    """
     print("Abort!")
     try:
         agent_host.sendCommand("quit")
     except Exception as e:
         print("Error sending quit:", e)
 
-# Mode the mission is in, if true, human has taken control
+# Flag representing if human has taken control and recording has commenced
 recording_mode = False
 recorder = Thread(target=record_loop, daemon=True)
 
@@ -374,6 +385,7 @@ recorder = Thread(target=record_loop, daemon=True)
 print("Starting mission...")
 YPOS = 2
 PITCH = 0
+# Can include a command-line arg to set a deterministic starting point
 if len(sys.argv) > 1:
   print("xpos:")
   xpos = int(input())
@@ -383,8 +395,8 @@ if len(sys.argv) > 1:
   yaw = int(input())
 else:
   rng = random.Random()
-  xpos = rng.randint(6, 50)
-  zpos = rng.randint(6, 50)
+  xpos = rng.randint(15, 50)
+  zpos = rng.randint(15, 50)
   yaw = rng.randint(0, 359)
 print(f"starting at x, y, z: {xpos, YPOS, zpos} in direction {yaw} degrees")
 mission.startAtWithPitchAndYaw(
@@ -394,6 +406,8 @@ mission.startAtWithPitchAndYaw(
     PITCH,
     yaw
 )
+
+# Mission set-up
 agent_host.startMission(mission, client_pool, record_spec, 0, "Navigation")
 print("Waiting for mission to start", end="")
 world_state = agent_host.getWorldState()
@@ -407,10 +421,11 @@ keyboard.add_hotkey('space', quit_mission)
 keyboard.add_hotkey('enter', setup_record_thread)
 time.sleep(2.0)
 
+# Main mission loop
 while world_state.is_mission_running:
     time.sleep(0.5)
     world_state = agent_host.getWorldState()
-    if not recording_mode: # if the mission is being done autonomously
+    if not recording_mode: # if the agent is moving autonomously
       frame_rgb = grab_rgb()
       actions = {
           'LEFT': -0.2,
@@ -422,20 +437,15 @@ while world_state.is_mission_running:
     else:
         pass
 
-
-### Standard End ###
+# Standard ending
 if recording_mode == False:
   print("🏁 Mission finished")
 
-
-
-### Demonstration end ###
+# If human provided a demonstration, we need to save the data
 if recording_mode == True:
   save_path = "../ProjectFiles/datasets/navigation_dataset_hybrid.pkl"
   with open(save_path, "wb") as f:
       pickle.dump(dataset, f)
-
-
 
   print(f"🏁 Mission finished — {len(dataset)} frames recorded.")
   print(f"✅ Saved as {save_path}")
